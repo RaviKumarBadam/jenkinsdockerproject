@@ -1,0 +1,42 @@
+node
+{
+    def DOCKER_TAG = getVersion()
+    // or can also use just simple BUILD_NUMBER rather than commit id, i.e. def DOCKER_TAG = BUILD_NUMBER
+   
+    stage('SCM Checkout'){
+        git 'https://github.com/RaviKumarBadam/jenkinsdockerproject.git' 
+    }
+    
+    stage('MVN Package'){
+        sh 'mvn clean package'
+    }
+    
+    //build docker image
+    stage('Build Docker Image'){
+       sh "docker build . -t rkb00856/jenkinsdocker:${DOCKER_TAG}"
+     }
+    
+    //Push docker image
+    stage('Push Docker Image'){ 
+        withCredentials([string(credentialsId: 'pwd', variable: 'pwd')]) {
+        sh "docker login -u rkb00856 -p ${pwd}" 
+        }
+        sh "docker push rkb00856/jenkinsdocker:${DOCKER_TAG}"
+    }
+    
+    //Run container on Deployment server
+    //Using sshAgent plugin to connect to remote Deployment server
+    stage('Run Container on Deployment'){
+        def dockerrun = "docker run -it -d -p 8081:8080 --name jenkinsdockercontainer2 rkb00856/jenkinsdocker:${DOCKER_TAG}"    
+        sshagent(['ubuntu']) {
+          sh "ssh -o StrictHostKeyChecking=no ubuntu@172.31.89.209 ${dockerrun}"
+         }
+     }
+}    
+
+// Using the command to pick up the latest commit id
+def getVersion(){
+def commitHash = sh label: '', returnStdout: true, script: 'git rev-parse --short HEAD'
+return commitHash
+}
+    
